@@ -1,16 +1,19 @@
 import os
 
 import discord
+import misc.variables as var
 from discord.ext import commands
 from dotenv import load_dotenv
 from misc.bot_logger import get_logger
 
-bot = commands.Bot(command_prefix="!", help_command=commands.DefaultHelpCommand(), intents=discord.Intents().all())
+bot = commands.Bot(
+    command_prefix=var.PREFIX, help_command=commands.DefaultHelpCommand(), intents=discord.Intents().all()
+)
 
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="!help"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=f"{var.PREFIX}help"))
     LOGGER.info(f"{bot.user.display_name} connected in [{*bot.guilds,}]")
 
 

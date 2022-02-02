@@ -1,4 +1,7 @@
+import asyncio
+
 import discord
+import misc.variables as var
 from discord.ext import commands
 from misc.bot_logger import get_logger
 
@@ -10,30 +13,29 @@ class PurgeBot(commands.Cog):
 
     @commands.command(name="delete", aliases=["purge", "del", "rm"], pass_context=True)
     @commands.has_permissions(manage_messages=True)
-    async def purge(self, ctx: commands.Context, arg: str):
-        if arg == "all" or arg == "*":
-            await ctx.channel.clone()
-            await ctx.channel.delete()
-            return
-        try:
-            msgs = list()
-            num = int(arg) + 1
-            async for msg in ctx.channel.history(limit=num):
-                msgs.append(msg)
-            await ctx.channel.delete_messages(msgs)
-        except discord.errors.HTTPException:
-            await ctx.send("can only delete messages that are under 14 Days old")
-        except ValueError:
-            await ctx.send("Argument needs to be a number between 1 and 99 or `all`")
-        except Exception as e:
-            await ctx.send(f"encountered {str(e)}")
-            self.logger.error(f"{ctx.message.content} (purge command) encountered {str(e)}")
+    async def purge(self, ctx: commands.Context, limit: int = None):
+        if limit is not None:
+            await ctx.channel.purge(limit=limit + 1)
+            info = await ctx.send(embed=discord.Embed(description=f"Deleted {limit} messages", color=var.C_GREEN))
+            self.logger.info(f"{ctx.author} deleted {limit} messages in {ctx.channel.name} of {ctx.guild.name}")
+            await asyncio.sleep(2)
+            await info.delete()
+
+        else:
+            await ctx.send(
+                embed=discord.Embed(
+                    description=(
+                        "🚫 You need to define the amount to delete messages too! Make sure the amount is numerical."
+                    ),
+                    color=var.C_RED,
+                ).add_field(name="Format", value=f"`{var.PREFIX}purge <amount>`")
+            )
 
     @commands.command(name="spam", pass_context=True)
     @commands.has_permissions(manage_messages=True)
     async def spam(self, ctx: commands.Context, arg: str):
-        for _ in range(int(arg)):
-            await ctx.send("spam")
+        for i in range(int(arg + 1)):
+            await ctx.send(f"--- {i} --- spam")
         await ctx.send("okay enough spam")
 
 
