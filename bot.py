@@ -1,11 +1,11 @@
 #!  /usr/bin/env python3.9
 
-import logging
 import os
 
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from misc.bot_logger import get_logger
 
 bot = commands.Bot(command_prefix="!", help_command=commands.DefaultHelpCommand(), intents=discord.Intents().all())
 
@@ -26,17 +26,6 @@ async def get_source(ctx: commands.Context):
     )
 
 
-def setup_logger():
-    log_format = "[%(asctime)s] %(levelname)-8s %(name)-12s %(message)s"
-    logging.basicConfig(level=logging.DEBUG, format=log_format, filename=("debug.log"))
-    file_handler = logging.FileHandler("SoR-Log.log")
-    file_handler.setFormatter(logging.Formatter(log_format))
-    file_handler.setLevel(logging.DEBUG)
-    global LOGGER
-    LOGGER = logging.getLogger("SoR-Logger")
-    LOGGER.addHandler(file_handler)
-
-
 class MyHelpCommand(commands.HelpCommand):
     """[summary]
     currenctly unused.
@@ -52,7 +41,8 @@ class MyHelpCommand(commands.HelpCommand):
 if __name__ == "__main__":
     load_dotenv()
     API_TOKEN = os.environ.get("TEST_API_TOKEN")
-    setup_logger()
+    global LOGGER
+    LOGGER = get_logger()
     for filename in os.listdir("./plugins"):
         if filename.endswith(".py"):
             bot.load_extension(f"plugins.{filename[:-3]}")
