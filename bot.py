@@ -7,13 +7,23 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-bot = commands.Bot(command_prefix="!", help_command=commands.DefaultHelpCommand())
+bot = commands.Bot(command_prefix="!", help_command=commands.DefaultHelpCommand(), intents=discord.Intents().all())
 
 
 @bot.event
 async def on_ready():
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="!help"))
     LOGGER.info(f"{bot.user.display_name} connected in [{*bot.guilds,}]")
+
+
+@bot.command(
+    name="source", aliases=["code", "git"], description="Get the link to the github repository", pass_context=True
+)
+async def get_source(ctx: commands.Context):
+    await ctx.send(
+        f"The source code for this bot can be found here: https://github.com/CaptainJack42/discord_bot_collection \n\n\
+        Feel free to report Bugs there or create a pull request if you already fixed them."
+    )
 
 
 def setup_logger():
