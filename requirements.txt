@@ -5,8 +5,8 @@ black==22.1.0
 cfgv==3.3.1
 chardet==3.0.4
 click==8.0.3
+discord.py==2.0.0a3686+g1fae5bf
 distlib==0.3.4
-enhanced-dpy==1.7.3.7.post6
 filelock==3.4.2
 identify==2.4.7
 idna==3.3
