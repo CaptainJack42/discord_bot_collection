@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Callable
 
@@ -21,9 +22,11 @@ class SoRGameClient(commands.Cog):
         self.logger = get_logger()
         self.players: dict[discord.User, SoRPlayer] = dict()
         self.is_running: bool = False
+        self.game_channel: commands.Context = None
+        self.card_deck: card_deck.CardDeck = None
         self.GAME_PHASES: list[self.SoRPhase] = [
             self.SoRPhase(  # noblack
-                message="**Schwarz oder Rot?",  # noblack
+                message="**Schwarz oder Rot?**",  # noblack
                 possible_reactions=["⚫", "🔴"],  # noblack
                 parser=self.parse_schwarz_rot,  # noblack
             ),
@@ -33,17 +36,15 @@ class SoRGameClient(commands.Cog):
                 parser=self.parse_hoeher_tiefer,
             ),
             self.SoRPhase(
-                message="**Innerhalb oder Außerhalb der ersten beiden Karten?** \n\
-                ✅ : innerhalb \n\
-                ❌ : außerhalb \n\
-                🌗 : gleich",
+                message="**Innerhalb oder Außerhalb der ersten beiden Karten?** \n"
+                "✅ : innerhalb \n"
+                "❌ : außerhalb \n"
+                "🌗 : gleich",
                 possible_reactions=["✅", "❌", "🌗"],
                 parser=self.parse_inner_auserhalb,
             ),
             self.SoRPhase(
-                message="**Hast du die Farbe bereits oder hast du sie nicht?** \n\
-                ✅ : hab ich \n\
-                ❌ : hab ich nicht",
+                message="**Hast du die Farbe bereits oder hast du sie nicht?** \n" "✅ : hab ich \n" "❌ : hab ich nicht",
                 possible_reactions=["✅", "❌"],
                 parser=self.parse_haben_nicht_haben,
             ),
@@ -59,6 +60,7 @@ class SoRGameClient(commands.Cog):
                 )
             )
             return
+        self.game_channel = ctx
         msg = await ctx.send(
             f"{ctx.author.mention} will Schwarz oder Rot spielen, @everyone macht mit indem ihr auf :beers: klickt!"
         )
@@ -74,18 +76,19 @@ class SoRGameClient(commands.Cog):
         while str(reaction.emoji) != "⏭️":
             await self.add_player(user, ctx)
             reaction, user = await self.bot.wait_for("reaction_add", check=check)
-        await ctx.send("success")
+        await self.run()
 
     @commands.command(name="stop", aliases=["ende", "end"], pass_context=True)
     async def stop_game(self, ctx: commands.Context = None):
-        # self.game = None
-        # if ctx == None:
-        #     self.logger.info("Game ended by timeout of all players")
-        #     await self.game_channel.send("Das Spiel wurde beendet weil alle Spieler nicht reagiert haben.")
-        # else:
+        self.game = None
+        if ctx == None:
+            self.logger.info("Game ended by timeout of all players")
+            await self.game_channel.send("Das Spiel wurde beended weil keine Spieler mehr übrig sind")
+        else:
+            self.logger.info(f"{ctx.author} ended the game")
+            await ctx.send(f"{ctx.author.mention} hat das Spiel beendet")
         self.is_running = False
-        self.logger.info(f"{ctx.author} ended the game")
-        await ctx.send(f"{ctx.author.mention} hat das Spiel beendet")
+        self.players.clear()
 
     async def add_player(self, user: discord.User, ctx: commands.Context):
         if self.players.get(user) == None:
@@ -94,31 +97,129 @@ class SoRGameClient(commands.Cog):
             await ctx.send(f"{user.mention} macht mit")
             self.logger.debug(f"{user} joined the game")
 
-    async def send_msg_and_wait_reaction(self, msg: str, user: discord.User, viable_reacts: list[str]) -> str | None:
-        pass
+    async def remove_player(self, user: discord.User):
+        if user in self.players.keys():
+            self.players.pop(user)
+        if len(self.players) <= 0:
+            self.stop_game()
+
+    async def send_msg_and_wait_reaction(
+        self, msg: str, curr_player: discord.User, viable_reacts: list[str]
+    ) -> str | None:
+        message: discord.Message = await self.game_channel.send(msg)
+        for emoji in viable_reacts:
+            await message.add_reaction(emoji)
+
+        def check(reaction, user):
+            return user == curr_player and str(reaction.emoji) in viable_reacts
+
+        try:
+            reaction, _ = await self.bot.wait_for("reaction_add", timeout=120.0, check=check)
+        except asyncio.TimoutError:
+            await self.game_channel.send(
+                f"{curr_player.mention} hat nicht reagiert und wird nun aus dem Spiel entfernt."
+            )
+            await self.remove_player(curr_player)
+            return None
+        else:
+            return str(reaction)
 
     async def run(self):
+        self.card_deck = card_deck.CardDeck()
         for phase in self.GAME_PHASES:
             for player, player_attrs in self.players.items():
-                msg = f"{player.mention} \n\
-                    {phase.message}\n"
+                msg = f"{player.mention} \n{phase.message}\n"
                 if len(player_attrs.prev_cards) > 0:
                     msg += "Deine bisherigen Karten sind:"
                     for card in player_attrs.prev_cards:
-                        msg += f"\n- **{card_deck.CardDeck.CARD_VALUE_MAP.get(card.value)}\
-                            :{card.color._name_.lower()}: ({card.color._name_})**"
+                        msg += f"\n- **{card_deck.CardDeck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({card.color._name_})**"
 
-    async def parse_schwarz_rot(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
-        pass
+                reaction = await self.send_msg_and_wait_reaction(msg, player, phase.possible_reactions)
+                if reaction == None:
+                    continue  # Player timed out
 
-    async def parse_hoeher_tiefer(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
-        pass
+                self.logger.debug(
+                    f"{player.name} reacted with {reaction} to {phase.message}.\
+                        This is viable -> {str(reaction) in phase.possible_reactions}"
+                )
 
-    async def parse_inner_auserhalb(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
-        pass
+                card: card_deck.Card = self.card_deck.draw_card()
 
-    async def parse_haben_nicht_haben(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
-        pass
+                msg = (
+                    f"{player.mention}\n"
+                    f"deine Karte ist: **{self.card_deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({self.card_deck.CARD_VALUE_MAP.get(card.value)} of {card.color._name_})**"
+                )
+
+                if await phase.parser(card, player_attrs.prev_cards, reaction):
+                    msg += "\n**RICHTIG!** Wähle jemanden der trinkt!"
+                else:
+                    msg += "\n**FALSCH!** Trink!"
+                player_attrs.prev_cards.append(card)
+                await self.game_channel.send(msg)
+
+        await self.game_channel.send(f"Das Spiel ist vorbei, startet ein neues mit `{var.PREFIX}sor`")
+
+    async def parse_schwarz_rot(self, card: card_deck.Card, prev_cards: list[card_deck.Card], reaction: str) -> bool:
+        if reaction == "⚫":
+            if card.color == card_deck.CardColor.SPADES or card.color == card_deck.CardColor.CLUBS:
+                return True
+            else:
+                return False
+        elif reaction == "🔴":
+            if card.color == card_deck.CardColor.HEARTS or card.color == card_deck.CardColor.DIAMONDS:
+                return True
+            else:
+                return False
+
+    async def parse_hoeher_tiefer(self, card: card_deck.Card, prev_cards: list[card_deck.Card], reaction: str) -> bool:
+        if reaction == "⏫":
+            if card.value > prev_cards[0].value:
+                return True
+            else:
+                return False
+        elif reaction == "⏬":
+            if card.value < prev_cards[0].value:
+                return True
+            else:
+                return False
+        elif reaction == "🌗":
+            if card.value == prev_cards[0].value:
+                return True
+            else:
+                return False
+
+    async def parse_inner_auserhalb(
+        self, card: card_deck.Card, prev_cards: list[card_deck.Card], reaction: str
+    ) -> bool:
+        if reaction == "✅":
+            if card.value > min(prev_cards[0:]).value and card.value < max(prev_cards[0:]).value:
+                return True
+            else:
+                return False
+        if reaction == "❌":
+            if card.value < min(prev_cards[0:]).value or card.value > max(prev_cards[0:]).value:
+                return True
+            else:
+                return False
+        if reaction == "🌗":
+            for c in prev_cards:
+                if card.value == c.value:
+                    return True
+            return False
+
+    async def parse_haben_nicht_haben(
+        self, card: card_deck.Card, prev_cards: list[card_deck.Card], reaction: str
+    ) -> bool:
+        if reaction == "✅":
+            for c in prev_cards:
+                if card.color == c.color:
+                    return True
+            return False
+        elif reaction == "❌":
+            for c in prev_cards:
+                if card.color == c.color:
+                    return False
+            return True
 
 
 @dataclass
