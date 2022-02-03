@@ -43,7 +43,7 @@ class MyHelpCommand(commands.HelpCommand):
 
 if __name__ == "__main__":
     load_dotenv()
-    API_TOKEN = os.environ.get("TEST_API_TOKEN")
+    API_TOKEN = os.environ.get("API_TOKEN")
     global LOGGER
     LOGGER = get_logger()
     for filename in os.listdir("./plugins"):
