@@ -10,6 +10,9 @@ from misc.bot_logger import get_logger
 
 
 class SoRGameClient(commands.Cog):
+    class GameEndedError(Exception):
+        pass
+
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__()
         self.bot = bot
@@ -66,6 +69,8 @@ class SoRGameClient(commands.Cog):
         while str(reaction.emoji) != "⏭️":
             await self.add_player(user, ctx)
             reaction, user = await self.bot.wait_for("reaction_add", check=check)
+        if not self.players.get(user):
+            await self.add_player(user, ctx)
         await self.run()
 
     @commands.command(name="stop", aliases=["ende", "end"])
@@ -102,11 +107,11 @@ class SoRGameClient(commands.Cog):
         for emoji in viable_reacts:
             await message.add_reaction(emoji)
 
-        def check(reaction, user):
-            return user == curr_player and str(reaction.emoji) in viable_reacts
+        def check(reaction: discord.Reaction, user: discord.User):
+            return user == curr_player and str(reaction.emoji) in viable_reacts and reaction.message == message
 
         try:
-            reaction, _ = await self.bot.wait_for("reaction_add", timeout=120.0, check=check)
+            reaction, _ = await self.bot.wait_for("reaction_add", timeout=10.0, check=check)
         except asyncio.TimeoutError:
             await self.game_channel.send(
                 f"{curr_player.mention} hat nicht reagiert und wird nun aus dem Spiel entfernt."
@@ -125,10 +130,11 @@ class SoRGameClient(commands.Cog):
                 if len(player_attrs.prev_cards) > 0:
                     msg += "Deine bisherigen Karten sind:"
                     for card in player_attrs.prev_cards:
-                        msg += f"\n- **{deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({card.color._name_})**"
+                        msg += f"\n- **{deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({deck.CARD_VALUE_MAP.get(card.value)} of {card.color._name_})**"
 
                 reaction = await self.send_msg_and_wait_reaction(msg, player, phase.possible_reactions)
                 if reaction == None:
+                    # FIXME: Leads to bugs when game is stopped the player will timeout in the next game if one is started before he times out
                     await self.remove_player(player)
                     active_players: int = 0
                     for p in self.players.values():
@@ -138,12 +144,13 @@ class SoRGameClient(commands.Cog):
                     if active_players <= 0:
                         await self.game_channel.send("Das Spiel wurde beendet weil keine Spieler mehr übrig sind")
                         self.game_channel.author = player
-                        return self.clear_game_info_vars()  # No Players left
+                        self.clear_game_info_vars()  # No Players left
+                        return
                     continue  # Player timed out
 
                 self.logger.debug(
-                    f"{player.name} reacted with {reaction} to {phase.message}.\
-                        This is viable -> {str(reaction) in phase.possible_reactions}"
+                    f"{player.name} reacted with {reaction} to {phase.message}."
+                    f"This is viable -> {str(reaction) in phase.possible_reactions}"
                 )
 
                 card: card_deck.Card = deck.draw_card()
@@ -158,7 +165,11 @@ class SoRGameClient(commands.Cog):
                 else:
                     msg += "\n**FALSCH!** Trink!"
                 player_attrs.prev_cards.append(card)
-                await self.game_channel.send(msg)
+                try:
+                    await self.game_channel.send(msg)
+                except AttributeError:
+                    self.clear_game_info_vars()  # game has ended (was stopped by {var.PREFIX}stop)
+                    return
 
         await self.game_channel.send(f"Das Spiel ist vorbei, startet ein neues mit `{var.PREFIX}sor`")
 
