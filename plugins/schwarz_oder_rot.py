@@ -10,12 +10,6 @@ from misc.bot_logger import get_logger
 
 
 class SoRGameClient(commands.Cog):
-    @dataclass
-    class SoRPhase:
-        message: str
-        possible_reactions: list[str]
-        parser: Callable
-
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__()
         self.bot = bot
@@ -23,28 +17,24 @@ class SoRGameClient(commands.Cog):
         self.players: dict[discord.User, SoRPlayer] = dict()
         self.is_running: bool = False
         self.game_channel: commands.Context = None
-        self.card_deck: card_deck.CardDeck = None
-        self.GAME_PHASES: list[self.SoRPhase] = [
-            self.SoRPhase(  # noblack
-                message="**Schwarz oder Rot?**",  # noblack
+        self.GAME_PHASES: list[SoRPhase] = [
+            SoRPhase(  # noblack
+                message="**⚫Schwarz⚫ oder 🔴Rot🔴?**",  # noblack
                 possible_reactions=["⚫", "🔴"],  # noblack
                 parser=self.parse_schwarz_rot,  # noblack
             ),
-            self.SoRPhase(
-                message="**Höher, Tiefer oder Gleich als die erste Karte?**",
+            SoRPhase(
+                message="**⏫Höher⏫, ⏬Tiefer⏬ oder 🌗Gleich🌗 als die erste Karte?**",
                 possible_reactions=["⏫", "⏬", "🌗"],
                 parser=self.parse_hoeher_tiefer,
             ),
-            self.SoRPhase(
-                message="**Innerhalb oder Außerhalb der ersten beiden Karten?** \n"
-                "✅ : innerhalb \n"
-                "❌ : außerhalb \n"
-                "🌗 : gleich",
+            SoRPhase(
+                message="**✅Innerhalb✅, ❌Außerhalb❌ oder 🌗gleich🌗 der ersten beiden Karten?** \n",
                 possible_reactions=["✅", "❌", "🌗"],
                 parser=self.parse_inner_auserhalb,
             ),
-            self.SoRPhase(
-                message="**Hast du die Farbe bereits oder hast du sie nicht?** \n" "✅ : hab ich \n" "❌ : hab ich nicht",
+            SoRPhase(
+                message="**✅Hast du die Farbe bereits✅ oder ❌hast du sie nicht❌?** \n",
                 possible_reactions=["✅", "❌"],
                 parser=self.parse_haben_nicht_haben,
             ),
@@ -78,15 +68,18 @@ class SoRGameClient(commands.Cog):
             reaction, user = await self.bot.wait_for("reaction_add", check=check)
         await self.run()
 
-    @commands.command(name="stop", aliases=["ende", "end"], pass_context=True)
-    async def stop_game(self, ctx: commands.Context = None):
-        self.game = None
-        if ctx == None:
-            self.logger.info("Game ended by timeout of all players")
-            await self.game_channel.send("Das Spiel wurde beended weil keine Spieler mehr übrig sind")
-        else:
-            self.logger.info(f"{ctx.author} ended the game")
-            await ctx.send(f"{ctx.author.mention} hat das Spiel beendet")
+    @commands.command(name="stop", aliases=["ende", "end"])
+    async def stop_game(self, ctx: commands.Context):
+        if self.is_running == False:
+            ctx.send("Es muss erst ein Spiel gestartet werden, damit es beendet werden kann...")
+            return
+
+        self.logger.info(f"{ctx.author} ended the game")
+        await ctx.send(f"{ctx.author.mention} hat das Spiel beendet")
+        self.clear_game_info_vars()
+
+    def clear_game_info_vars(self):
+        self.game_channel = None
         self.is_running = False
         self.players.clear()
 
@@ -99,9 +92,8 @@ class SoRGameClient(commands.Cog):
 
     async def remove_player(self, user: discord.User):
         if user in self.players.keys():
-            self.players.pop(user)
-        if len(self.players) <= 0:
-            self.stop_game()
+            self.players[user].is_active = False
+            self.logger.info("Game ended by timeout of all players")
 
     async def send_msg_and_wait_reaction(
         self, msg: str, curr_player: discord.User, viable_reacts: list[str]
@@ -115,27 +107,38 @@ class SoRGameClient(commands.Cog):
 
         try:
             reaction, _ = await self.bot.wait_for("reaction_add", timeout=120.0, check=check)
-        except asyncio.TimoutError:
+        except asyncio.TimeoutError:
             await self.game_channel.send(
                 f"{curr_player.mention} hat nicht reagiert und wird nun aus dem Spiel entfernt."
             )
-            await self.remove_player(curr_player)
             return None
         else:
             return str(reaction)
 
     async def run(self):
-        self.card_deck = card_deck.CardDeck()
+        deck = card_deck.CardDeck()
         for phase in self.GAME_PHASES:
             for player, player_attrs in self.players.items():
+                if not player_attrs.is_active:
+                    continue
                 msg = f"{player.mention} \n{phase.message}\n"
                 if len(player_attrs.prev_cards) > 0:
                     msg += "Deine bisherigen Karten sind:"
                     for card in player_attrs.prev_cards:
-                        msg += f"\n- **{card_deck.CardDeck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({card.color._name_})**"
+                        msg += f"\n- **{deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({card.color._name_})**"
 
                 reaction = await self.send_msg_and_wait_reaction(msg, player, phase.possible_reactions)
                 if reaction == None:
+                    await self.remove_player(player)
+                    active_players: int = 0
+                    for p in self.players.values():
+                        if p.is_active:
+                            active_players += 1
+                            break
+                    if active_players <= 0:
+                        await self.game_channel.send("Das Spiel wurde beendet weil keine Spieler mehr übrig sind")
+                        self.game_channel.author = player
+                        return self.clear_game_info_vars()  # No Players left
                     continue  # Player timed out
 
                 self.logger.debug(
@@ -143,11 +146,11 @@ class SoRGameClient(commands.Cog):
                         This is viable -> {str(reaction) in phase.possible_reactions}"
                 )
 
-                card: card_deck.Card = self.card_deck.draw_card()
+                card: card_deck.Card = deck.draw_card()
 
                 msg = (
                     f"{player.mention}\n"
-                    f"deine Karte ist: **{self.card_deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({self.card_deck.CARD_VALUE_MAP.get(card.value)} of {card.color._name_})**"
+                    f"deine Karte ist: **{deck.CARD_VALUE_MAP.get(card.value)}:{card.color._name_.lower()}: ({deck.CARD_VALUE_MAP.get(card.value)} of {card.color._name_})**"
                 )
 
                 if await phase.parser(card, player_attrs.prev_cards, reaction):
@@ -158,6 +161,8 @@ class SoRGameClient(commands.Cog):
                 await self.game_channel.send(msg)
 
         await self.game_channel.send(f"Das Spiel ist vorbei, startet ein neues mit `{var.PREFIX}sor`")
+
+        self.clear_game_info_vars()
 
     async def parse_schwarz_rot(self, card: card_deck.Card, prev_cards: list[card_deck.Card], reaction: str) -> bool:
         if reaction == "⚫":
@@ -227,6 +232,14 @@ class SoRPlayer:
     """dataclass representing a player. Can be expanded in the future to hold things like amount drank and so on."""
 
     prev_cards: list[card_deck.Card]
+    is_active: bool = True
+
+
+@dataclass
+class SoRPhase:
+    message: str
+    possible_reactions: list[str]
+    parser: Callable
 
 
 def setup(bot: commands.Bot):
