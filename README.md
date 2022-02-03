@@ -16,7 +16,7 @@ A collection of discord bots created with Python using the enhanced-dpy module
 
 6. create a file named `.env` and add your API Token to it like this:
 
-```
+```env
 API_TOKEN="<your API Token>"
 ```
 
