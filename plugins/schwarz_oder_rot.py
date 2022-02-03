@@ -1,10 +1,9 @@
-from dataclasses import dataclass, field
-from enum import IntEnum
-from random import randint
+from dataclasses import dataclass
 from typing import Callable
 
 import discord
 import misc.variables as var
+import plugins.ressource.card_deck as card_deck
 from discord.ext import commands
 from misc.bot_logger import get_logger
 
@@ -14,7 +13,7 @@ class SoRGameClient(commands.Cog):
     class SoRPhase:
         message: str
         possible_reactions: list[str]
-        runner: Callable
+        parser: Callable
 
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__()
@@ -22,33 +21,33 @@ class SoRGameClient(commands.Cog):
         self.logger = get_logger()
         self.players: dict[discord.User, SoRPlayer] = dict()
         self.is_running: bool = False
-        self.GAME_PHASES: dict[int, self.SoRPhase] = {
-            0: self.SoRPhase(  # noblack
+        self.GAME_PHASES: list[self.SoRPhase] = [
+            self.SoRPhase(  # noblack
                 message="**Schwarz oder Rot?",  # noblack
                 possible_reactions=["⚫", "🔴"],  # noblack
-                runner=self.phase_1,  # noblack
+                parser=self.parse_schwarz_rot,  # noblack
             ),
-            1: self.SoRPhase(
+            self.SoRPhase(
                 message="**Höher, Tiefer oder Gleich als die erste Karte?**",
                 possible_reactions=["⏫", "⏬", "🌗"],
-                runner=self.phase_2,
+                parser=self.parse_hoeher_tiefer,
             ),
-            2: self.SoRPhase(
+            self.SoRPhase(
                 message="**Innerhalb oder Außerhalb der ersten beiden Karten?** \n\
-                    ✅ : innerhalb \n\
-                    ❌ : außerhalb \n\
-                    🌗 : gleich",
+                ✅ : innerhalb \n\
+                ❌ : außerhalb \n\
+                🌗 : gleich",
                 possible_reactions=["✅", "❌", "🌗"],
-                runner=self.phase_3,
+                parser=self.parse_inner_auserhalb,
             ),
-            3: self.SoRPhase(
+            self.SoRPhase(
                 message="**Hast du die Farbe bereits oder hast du sie nicht?** \n\
-                    ✅ : hab ich \n\
-                    ❌ : hab ich nicht",
+                ✅ : hab ich \n\
+                ❌ : hab ich nicht",
                 possible_reactions=["✅", "❌"],
-                runner=self.phase_4,
+                parser=self.parse_haben_nicht_haben,
             ),
-        }
+        ]
 
     @commands.command(name="Schwarz oder Rot", aliases=["sor", "schwarz", "rot"], pass_context=True)
     async def create_game(self, ctx: commands.Context):
@@ -61,12 +60,9 @@ class SoRGameClient(commands.Cog):
             )
             return
         msg = await ctx.send(
-            embed=discord.Embed(
-                title="Schwarz oder Rot",
-                description=f"{ctx.author.mention} will Schwarz oder Rot spielen, @everyone macht mit!",
-                color=var.C_RED,
-            )
+            f"{ctx.author.mention} will Schwarz oder Rot spielen, @everyone macht mit indem ihr auf :beers: klickt!"
         )
+
         self.is_running = True
 
         def check(reaction: discord.Reaction, user: discord.User):
@@ -98,85 +94,39 @@ class SoRGameClient(commands.Cog):
             await ctx.send(f"{user.mention} macht mit")
             self.logger.debug(f"{user} joined the game")
 
-    async def phase_1(self):
+    async def send_msg_and_wait_reaction(self, msg: str, user: discord.User, viable_reacts: list[str]) -> str | None:
         pass
 
-    async def phase_2(self):
+    async def run(self):
+        for phase in self.GAME_PHASES:
+            for player, player_attrs in self.players.items():
+                msg = f"{player.mention} \n\
+                    {phase.message}\n"
+                if len(player_attrs.prev_cards) > 0:
+                    msg += "Deine bisherigen Karten sind:"
+                    for card in player_attrs.prev_cards:
+                        msg += f"\n- **{card_deck.CardDeck.CARD_VALUE_MAP.get(card.value)}\
+                            :{card.color._name_.lower()}: ({card.color._name_})**"
+
+    async def parse_schwarz_rot(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
         pass
 
-    async def phase_3(self):
+    async def parse_hoeher_tiefer(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
         pass
 
-    async def phase_4(self):
+    async def parse_inner_auserhalb(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
         pass
 
-
-class CardColor(IntEnum):
-    HEARTS = 0
-    DIAMONDS = 1
-    SPADES = 2
-    CLUBS = 3
-
-
-@dataclass(order=True)
-class Card:
-    sort_index: int = field(init=False, repr=False)
-
-    color: CardColor
-    value: int
-
-    def __post_init__(self):
-        self.sort_index = self.value
-
-
-class CardDeck:
-
-    CARD_VALUE_MAP: dict = {
-        2: "2",
-        3: "3",
-        4: "4",
-        5: "5",
-        6: "6",
-        7: "7",
-        8: "8",
-        9: "9",
-        10: "10",
-        11: "Jack",
-        12: "Queen",
-        13: "King",
-        14: "Ace",
-    }
-
-    def __init__(self) -> None:
-        self.__deck: list[Card] = list()
-        for color in CardColor:
-            for key in self.CARD_VALUE_MAP.keys():
-                self.__deck.append(Card(color, key))
-
-    def draw_card(self) -> Card:
-        if len(self.__deck) == 0:
-            return None
-        rand: int = randint(0, len(self.__deck) - 1)
-        return self.__deck.pop(rand)
+    async def parse_haben_nicht_haben(self, card: card_deck.Card, prev_cards: list[card_deck.Card]):
+        pass
 
 
 @dataclass
 class SoRPlayer:
     """dataclass representing a player. Can be expanded in the future to hold things like amount drank and so on."""
 
-    prev_cards: list[Card]
+    prev_cards: list[card_deck.Card]
 
 
 def setup(bot: commands.Bot):
     bot.add_cog(SoRGameClient(bot))
-
-
-if __name__ == "__main__":
-    deck = CardDeck()
-    card: Card = deck.draw_card()
-    num_drawn: int = 0  # 0 because the last drawn card (None) is also counted
-    while card != None:
-        print(f"drew {deck.CARD_VALUE_MAP.get(card.value)} of {card.color._name_}")
-        card = deck.draw_card()
-        num_drawn += 1
-    print(f"drew {num_drawn} cards in total")
