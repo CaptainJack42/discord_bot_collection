@@ -23,7 +23,7 @@ async def get_source(ctx: commands.Context):
         embed=discord.Embed(
             title="Source Code",
             description=f"The source code for this bot can be found here: https://github.com/CaptainJack42/discord_bot_collection \n\n\
-            Feel free to report Bugs there or create a pull request if you already fixed them.",
+            Feel free to report Bugs or suggest features there or create a pull request if you already fixed or implemented them.",
             color=var.C_ORANGE,
         )
     )
