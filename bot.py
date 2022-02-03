@@ -17,13 +17,15 @@ async def on_ready():
     LOGGER.info(f"{bot.user.display_name} connected in [{*bot.guilds,}]")
 
 
-@bot.command(
-    name="source", aliases=["code", "git"], description="Get the link to the github repository", pass_context=True
-)
+@bot.command(name="source", aliases=["code", "git"], help="Get the link to the github repository", pass_context=True)
 async def get_source(ctx: commands.Context):
-    await ctx.send(
-        f"The source code for this bot can be found here: https://github.com/CaptainJack42/discord_bot_collection \n\n\
-        Feel free to report Bugs there or create a pull request if you already fixed them."
+    await ctx.reply(
+        embed=discord.Embed(
+            title="Source Code",
+            description=f"The source code for this bot can be found here: https://github.com/CaptainJack42/discord_bot_collection \n\n\
+            Feel free to report Bugs there or create a pull request if you already fixed them.",
+            color=var.C_ORANGE,
+        )
     )
 
 
