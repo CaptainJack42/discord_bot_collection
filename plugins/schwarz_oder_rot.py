@@ -123,7 +123,7 @@ class SoRGame:
             return user == curr_player and str(reaction.emoji) in viable_reacts and reaction.message == message
 
         try:
-            reaction, _ = await self.bot.wait_for("reaction_add", timeout=10.0, check=check)
+            reaction, _ = await self.bot.wait_for("reaction_add", timeout=120.0, check=check)
         except asyncio.TimeoutError:
             # await self.game_channel.send(
             #     f"{curr_player.mention} hat nicht reagiert und wird nun aus dem Spiel entfernt."
