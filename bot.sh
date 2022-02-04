@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /usr/bin/env bash
 
 ### BEGIN INIT INFO
 # Provides:          fancontrol.py
@@ -13,7 +13,8 @@
 case "$1" in
     start)
         echo "Starting Discord Bot"
-        /home/pi/discord_bot_collection/bot.py &
+        source /home/pi/discord_bot_collection/.venv/bin/activate &
+        /home/pi/discord_bot_collection/.venv/bin/python /home/pi/discord_bot_collection/bot.py &
         ;;
     stop)
         echo "Stopping Discord Bot"
