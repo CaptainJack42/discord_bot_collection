@@ -11,7 +11,12 @@ class PurgeBot(commands.Cog):
         self.bot = bot
         self.logger = get_logger()
 
-    @commands.command(name="delete", aliases=["purge", "del", "rm"], pass_context=True)
+    @commands.command(
+        name="delete",
+        aliases=["purge", "del", "rm"],
+        pass_context=True,
+        help="deletes <amount> messages from the channel",
+    )
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx: commands.Context, limit: int = None):
         if limit is not None:
@@ -31,7 +36,7 @@ class PurgeBot(commands.Cog):
                 ).add_field(name="Format", value=f"`{var.PREFIX}purge <amount>`")
             )
 
-    @commands.command(name="spam", pass_context=True)
+    @commands.command(name="spam", pass_context=True, help="Spams <amount> messages in the channel")
     @commands.has_permissions(manage_messages=True)
     async def spam(self, ctx: commands.Context, arg: str):
         for i in range(int(arg + 1)):
