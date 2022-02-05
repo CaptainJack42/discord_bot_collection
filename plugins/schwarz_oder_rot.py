@@ -9,14 +9,19 @@ from discord.ext import commands
 from misc.bot_logger import get_logger
 
 
-class SoRGameClient(commands.Cog):
+class SoRGameClient(commands.Cog, name="Schwarz oder Rot"):
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__()
         self.bot = bot
         self.logger = get_logger()
         self.games: dict[discord.TextChannel, SoRGame] = dict()
 
-    @commands.command(name="Schwarz oder Rot", aliases=["sor", "schwarz", "rot"], pass_context=True)
+    @commands.command(
+        name="Schwarz oder Rot",
+        aliases=["sor", "schwarz", "rot"],
+        pass_context=True,
+        help="Starte ein neues Schwarz oder Rot Spiel",
+    )
     async def create_game(self, ctx: commands.Context):
         if ctx.channel in self.games.keys():
             await ctx.reply(
@@ -31,7 +36,7 @@ class SoRGameClient(commands.Cog):
         self.games[ctx.channel] = new_game
         await new_game.create_game()
 
-    @commands.command(name="stop", aliases=["ende", "end"])
+    @commands.command(name="stop", aliases=["ende", "end"], help="Beendet das aktuelle Schwarz oder Rot Spiel")
     async def stop_game(self, ctx: commands.Context):
         if ctx.channel in self.games.keys():
             stopped_game = self.games.pop(ctx.channel)
