@@ -38,8 +38,11 @@ class PurgeBot(commands.Cog):
 
     @commands.command(name="spam", pass_context=True, help="Spams <amount> messages in the channel")
     @commands.has_permissions(manage_messages=True)
-    async def spam(self, ctx: commands.Context, arg: str):
-        for i in range(int(arg + 1)):
+    async def spam(self, ctx: commands.Context, arg: int = None):
+        if arg == None:
+            await ctx.send("You need to tell me how much i should spam")
+            return
+        for i in range(arg + 1):
             await ctx.send(f"--- {i} --- spam")
         await ctx.send("okay enough spam")
 
